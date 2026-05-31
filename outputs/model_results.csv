@@ -1,0 +1,4 @@
+model,accuracy,f1,auc,kappa,mcc
+Baseline: TF-IDF + LR,0.9286,0.9281,0.9814,0.8572,0.8572
+Linguistic + GBM,0.8507,0.8522,0.9336,0.7015,0.7016
+SENTINEL Hybrid,0.9049,0.9038,0.9699,0.8098,0.81
