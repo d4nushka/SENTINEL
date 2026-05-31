@@ -1,0 +1,14 @@
+f1,kappa,mcc,auc,experiment,removed,n_features,f1_drop,kappa_drop
+0.8373,0.6744,0.6744,0.9222,Full model (all features),None,15,,
+0.8075,0.6176,0.6177,0.8959,Without Length features,Length features,11,0.0298,0.0568
+0.8304,0.6593,0.6593,0.9146,Without Punctuation features,Punctuation features,11,0.0069,0.0151
+0.8193,0.6341,0.6343,0.9065,Without Lexical features,Lexical features,13,0.018,0.0403
+0.8386,0.6768,0.6768,0.9221,Without Sentiment features,Sentiment features,13,-0.0013,-0.0024
+0.8356,0.6714,0.6714,0.9218,Without Chaos features,Chaos features,13,0.0017,0.003
+0.838,0.6756,0.6756,0.9222,Without Rating,Rating,14,-0.0007,-0.0012
+0.7604,0.5138,0.514,0.8365,Only Length features,All except Length features,4,0.0769,0.1606
+0.6612,0.2441,0.2509,0.6736,Only Punctuation features,All except Punctuation features,4,0.1761,0.4303
+0.624,0.3198,0.3258,0.7212,Only Lexical features,All except Lexical features,2,0.2133,0.3546
+0.6654,0.1376,0.1686,0.5997,Only Sentiment features,All except Sentiment features,2,0.1719,0.5368
+0.6381,0.2266,0.2288,0.6744,Only Chaos features,All except Chaos features,2,0.1992,0.4478
+0.5864,0.016,0.0172,0.5101,Only Rating,All except Rating,1,0.2509,0.6584
