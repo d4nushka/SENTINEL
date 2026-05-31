@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 from scipy.sparse import hstack, csr_matrix
-import re, math
+import re, math, sys
 from collections import Counter
 
 st.set_page_config(page_title="SENTINEL", page_icon="🛡️", layout="wide")
@@ -101,9 +101,22 @@ def load_models():
     tfidf_vec = pickle.load(open("outputs/tfidf_vec.pkl",       "rb"))
     return baseline, gbm, sentinel, scaler, tfidf_vec
 
+@st.cache_resource
+def load_distilbert():
+    try:
+        sys.path.insert(0, '.')
+        from src.distilbert_predict import load_distilbert as _load
+        model, tokenizer, device = _load()
+        return model, tokenizer, device
+    except Exception as e:
+        return None, None, None
+
 # ── UI ────────────────────────────────────────────────────────────────────────
 st.title("🛡️ SENTINEL")
-st.markdown("**LLM-Generated Fake Review Detector** | Trained on 40,431 reviews · Cohen Kappa: 0.87 · AUC: 0.98")
+st.markdown("""
+**Cross-Domain LLM-Generated Fake Review Detector**
+Trained on 40,431 reviews · DistilBERT F1=0.9782 · Cohen Kappa=0.9561 · AUC=0.9980
+""")
 st.divider()
 
 col1, col2 = st.columns([2, 1])
@@ -111,99 +124,125 @@ col1, col2 = st.columns([2, 1])
 with col1:
     review_text = st.text_area("Paste a product review to analyze:", height=150,
         placeholder="Paste any product review here...")
-    rating = st.slider("Product rating given by reviewer", 1.0, 5.0, 4.0, 0.5)
-    analyze = st.button("🔍 Analyze Review", use_container_width=True)
+    rating  = st.slider("Product rating given by reviewer", 1.0, 5.0, 4.0, 0.5)
+    analyze = st.button("🔍 Analyze Review", use_container_width=True, type="primary")
 
 with col2:
     st.markdown("**Try these examples:**")
     samples = {
-        "🚨 Likely Fake": "This product is absolutely AMAZING!!! Best purchase EVER! Changed my life completely! Everyone needs this NOW! Five stars is not enough!!!",
-        "✅ Likely Real": "Decent product for the price. Shipping was a bit slow but it does what it says. Nothing fancy but no complaints.",
-        "🤔 Tricky case": "Good product. Works as expected. Delivery was fast. Would recommend to friends.",
+        "🚨 Spam fake":     "This product is absolutely AMAZING!!! Best purchase EVER! Changed my life completely! Everyone needs this NOW! Five stars is not enough!!!",
+        "🚨 Subtle fake":   "This pillow saved my back. I love the look and feel of this pillow.",
+        "✅ Real review":   "Decent product for the price. Shipping was a bit slow but it does what it says. Nothing fancy but no complaints.",
+        "✅ Negative real": "Terrible experience. Product stopped working after 2 days. Very disappointed with the quality.",
     }
     for label, text in samples.items():
         if st.button(label, use_container_width=True):
-            st.session_state['sample_text'] = text
-            st.session_state['sample_rating'] = 5.0 if "Fake" in label else 4.0
+            st.session_state['sample_text']   = text
+            st.session_state['sample_rating'] = 5.0 if "fake" in label.lower() else 4.0
 
 if 'sample_text' in st.session_state:
     review_text = st.session_state['sample_text']
 
 if analyze and review_text.strip():
-    try:
-        baseline, gbm, sentinel, scaler, tfidf_vec = load_models()
-
-        features = extract_features(review_text, rating)
-        feat_df  = pd.DataFrame([features])
-        feat_scaled = scaler.transform(feat_df[FEATURE_COLS])
-
-        bl_prob  = baseline.predict_proba([review_text])[0][1]
-        gbm_prob = gbm.predict_proba(feat_scaled)[0][1]
-        tfidf_v  = tfidf_vec.transform([review_text])
-        hyb_feat = hstack([tfidf_v, csr_matrix(feat_scaled)])
-        sen_prob = sentinel.predict_proba(hyb_feat)[0][1]
-
-        ensemble_prob = (bl_prob * 0.35 + gbm_prob * 0.45 + sen_prob * 0.20)
-        is_fake = ensemble_prob > 0.5
-
-        st.divider()
-        v1, v2, v3 = st.columns(3)
-        with v1:
-            if is_fake:
-                st.error("⚠️ FAKE REVIEW DETECTED")
-            else:
-                st.success("✅ LIKELY GENUINE")
-        with v2:
-            st.metric("Fake Probability", f"{ensemble_prob:.1%}")
-        with v3:
-            confidence = abs(ensemble_prob - 0.5) * 2
-            st.metric("Confidence", f"{confidence:.1%}")
-
-        st.divider()
-        st.subheader("Model Breakdown")
-        mc1, mc2, mc3 = st.columns(3)
-        mc1.metric("TF-IDF + LR", f"{bl_prob:.1%}", help="Baseline model")
-        mc2.metric("Linguistic GBM", f"{gbm_prob:.1%}", help="Feature-based model")
-        mc3.metric("SENTINEL Hybrid", f"{sen_prob:.1%}", help="Combined model")
-
-        st.divider()
-        st.subheader("Linguistic Signal Analysis")
-        fc1, fc2, fc3, fc4, fc5 = st.columns(5)
-        fc1.metric("Words", features['word_count'])
-        fc2.metric("Exclamations", features['exclamation_cnt'])
-        fc3.metric("Vocab Diversity", f"{features['type_token_ratio']:.2f}")
-        fc4.metric("Vagueness", f"{features['vagueness_score']:.3f}")
-        fc5.metric("Caps Ratio", f"{features['caps_ratio']:.2%}")
-
-        # SHAP explanation
+    with st.spinner("Analyzing..."):
         try:
-            explainer   = shap.TreeExplainer(gbm)
-            shap_values = explainer.shap_values(pd.DataFrame(feat_scaled, columns=FEATURE_COLS))
-            if isinstance(shap_values, list):
-                sv = shap_values[1][0]
-            elif len(np.array(shap_values).shape) == 3:
-                sv = shap_values[0, :, 1]
+            baseline, gbm, sentinel, scaler, tfidf_vec = load_models()
+            db_model, db_tokenizer, db_device = load_distilbert()
+
+            features    = extract_features(review_text, rating)
+            feat_df     = pd.DataFrame([features])
+            feat_scaled = scaler.transform(feat_df[FEATURE_COLS])
+
+            bl_prob  = baseline.predict_proba([review_text])[0][1]
+            gbm_prob = gbm.predict_proba(feat_scaled)[0][1]
+            tfidf_v  = tfidf_vec.transform([review_text])
+            hyb_feat = hstack([tfidf_v, csr_matrix(feat_scaled)])
+            sen_prob = sentinel.predict_proba(hyb_feat)[0][1]
+
+            if db_model is not None:
+                from src.distilbert_predict import predict as db_predict
+                db_prob, _ = db_predict(review_text, db_model, db_tokenizer, db_device)
+                spam_signals = features['exclamation_cnt'] > 3 or features['caps_ratio'] > 0.08
+                if spam_signals:
+                    ensemble_prob = (db_prob * 0.15 + bl_prob * 0.15 +
+                                     gbm_prob * 0.60 + sen_prob * 0.10)
+                else:
+                    ensemble_prob = (db_prob * 0.50 + bl_prob * 0.20 +
+                                     gbm_prob * 0.20 + sen_prob * 0.10)
+                using_distilbert = True
             else:
-                sv = shap_values[0]
+                db_prob = None
+                ensemble_prob = (bl_prob * 0.35 + gbm_prob * 0.45 + sen_prob * 0.20)
+                using_distilbert = False
 
-            shap_df = pd.DataFrame({'Feature': FEATURE_COLS, 'SHAP': sv})
-            shap_df = shap_df.reindex(shap_df['SHAP'].abs().sort_values(ascending=True).index)
+            is_fake    = ensemble_prob > 0.5
+            confidence = abs(ensemble_prob - 0.5) * 2
 
-            st.divider()
-            st.subheader("🔍 Why SENTINEL made this decision")
-            fig, ax = plt.subplots(figsize=(8, 5))
-            colors = ['#e74c3c' if v > 0 else '#2ecc71' for v in shap_df['SHAP']]
-            ax.barh(shap_df['Feature'], shap_df['SHAP'], color=colors)
-            ax.axvline(0, color='black', linewidth=0.8)
-            ax.set_xlabel("SHAP value  (red → pushed toward FAKE  |  green → pushed toward REAL)")
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close()
         except Exception as e:
-            st.info(f"SHAP visualization skipped: {e}")
+            st.error(f"Error: {e}")
+            st.stop()
 
-    except FileNotFoundError:
-        st.error("Models not found! Run: python src/train.py first.")
+    st.divider()
+    v1, v2, v3 = st.columns(3)
+    with v1:
+        if is_fake:
+            st.error("⚠️ FAKE REVIEW DETECTED")
+        else:
+            st.success("✅ LIKELY GENUINE")
+    with v2:
+        st.metric("Fake Probability", f"{ensemble_prob:.1%}")
+    with v3:
+        st.metric("Confidence", f"{confidence:.1%}")
+
+    st.divider()
+    st.subheader("Model Breakdown")
+    if using_distilbert and db_prob is not None:
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("DistilBERT",     f"{db_prob:.1%}",  help="Fine-tuned transformer F1=0.978")
+        mc2.metric("TF-IDF + LR",    f"{bl_prob:.1%}",  help="Baseline model")
+        mc3.metric("Linguistic GBM", f"{gbm_prob:.1%}", help="Feature-based model")
+        mc4.metric("SENTINEL Hybrid",f"{sen_prob:.1%}", help="Combined model")
+    else:
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("TF-IDF + LR",    f"{bl_prob:.1%}")
+        mc2.metric("Linguistic GBM", f"{gbm_prob:.1%}")
+        mc3.metric("SENTINEL Hybrid",f"{sen_prob:.1%}")
+
+    st.divider()
+    st.subheader("Linguistic Signal Analysis")
+    fc1, fc2, fc3, fc4, fc5 = st.columns(5)
+    fc1.metric("Words",           features['word_count'])
+    fc2.metric("Exclamations",    features['exclamation_cnt'])
+    fc3.metric("Vocab Diversity", f"{features['type_token_ratio']:.2f}")
+    fc4.metric("Vagueness",       f"{features['vagueness_score']:.3f}")
+    fc5.metric("Caps Ratio",      f"{features['caps_ratio']:.2%}")
+
+    try:
+        explainer   = shap.TreeExplainer(gbm)
+        shap_values = explainer.shap_values(
+            pd.DataFrame(feat_scaled, columns=FEATURE_COLS))
+        if isinstance(shap_values, list):
+            sv = shap_values[1][0]
+        elif len(np.array(shap_values).shape) == 3:
+            sv = shap_values[0, :, 1]
+        else:
+            sv = shap_values[0]
+
+        shap_df = pd.DataFrame({'Feature': FEATURE_COLS, 'SHAP': sv})
+        shap_df = shap_df.reindex(shap_df['SHAP'].abs().sort_values(ascending=True).index)
+
+        st.divider()
+        st.subheader("🔍 Why SENTINEL made this decision")
+        fig, ax = plt.subplots(figsize=(8, 5))
+        colors = ['#e74c3c' if v > 0 else '#2ecc71' for v in shap_df['SHAP']]
+        ax.barh(shap_df['Feature'], shap_df['SHAP'], color=colors)
+        ax.axvline(0, color='black', linewidth=0.8)
+        ax.set_xlabel("SHAP value  (red → FAKE  |  green → REAL)")
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+    except Exception:
+        pass
 
 st.divider()
-st.caption("SENTINEL · 40,431 reviews · F1=0.93 · AUC=0.98 · Cohen Kappa=0.87 · Built by Anushka Das, VIT Bhopal")
+st.caption("SENTINEL · DistilBERT F1=0.9782 · Kappa=0.9561 · AUC=0.9980 · 40,431 reviews · Built by Anushka Das, VIT Bhopal")
