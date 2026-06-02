@@ -1,0 +1,38 @@
+[
+  {
+    "model": "Baseline TF-IDF + LR",
+    "dataset": "OpSpam",
+    "accuracy": 0.4994,
+    "f1": 0.005,
+    "auc": 0.4907,
+    "kappa": -0.0012,
+    "mcc": -0.0112
+  },
+  {
+    "model": "Linguistic + GBM",
+    "dataset": "OpSpam",
+    "accuracy": 0.5019,
+    "f1": 0.0933,
+    "auc": 0.5288,
+    "kappa": 0.0038,
+    "mcc": 0.0087
+  },
+  {
+    "model": "SENTINEL Hybrid",
+    "dataset": "OpSpam",
+    "accuracy": 0.5069,
+    "f1": 0.0663,
+    "auc": 0.5486,
+    "kappa": 0.0138,
+    "mcc": 0.0416
+  },
+  {
+    "model": "DistilBERT (fine-tuned)",
+    "dataset": "OpSpam",
+    "accuracy": 0.5081,
+    "f1": 0.0484,
+    "auc": 0.6464,
+    "kappa": 0.0162,
+    "mcc": 0.0631
+  }
+]

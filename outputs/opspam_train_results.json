@@ -1,0 +1,26 @@
+[
+  {
+    "model": "Baseline TF-IDF + LR",
+    "accuracy": 0.9031,
+    "f1": 0.904,
+    "auc": 0.9509,
+    "kappa": 0.8063,
+    "mcc": 0.8064
+  },
+  {
+    "model": "Linguistic + GBM",
+    "accuracy": 0.6219,
+    "f1": 0.6409,
+    "auc": 0.6618,
+    "kappa": 0.2438,
+    "mcc": 0.2451
+  },
+  {
+    "model": "SENTINEL Hybrid",
+    "accuracy": 0.7906,
+    "f1": 0.8024,
+    "auc": 0.8781,
+    "kappa": 0.5813,
+    "mcc": 0.5854
+  }
+]
