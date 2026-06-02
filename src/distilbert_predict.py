@@ -8,16 +8,18 @@ import torch
 import numpy as np
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 
-MODEL_PATH = "outputs/distilbert_full"
+HF_MODEL  = "d4nushka/fake-review-detector-distilbert"
+LOCAL_PATH = "outputs/distilbert_full"
 MAX_LEN    = 128
 
 def load_distilbert():
-    """Load model and tokenizer from local folder. Call once at startup."""
+    """Load from local if available, else download from HuggingFace Hub."""
+    import os
     device = torch.device('cpu')
-    print("[distilbert] Loading tokenizer...")
-    tokenizer = DistilBertTokenizer.from_pretrained(MODEL_PATH)
-    print("[distilbert] Loading model...")
-    model = DistilBertForSequenceClassification.from_pretrained(MODEL_PATH)
+    source = LOCAL_PATH if os.path.exists(LOCAL_PATH) else HF_MODEL
+    print(f"[distilbert] Loading from: {source}")
+    tokenizer = DistilBertTokenizer.from_pretrained(source)
+    model     = DistilBertForSequenceClassification.from_pretrained(source)
     model.eval()
     model = model.to(device)
     print("[distilbert] Model ready!")
